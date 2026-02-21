@@ -8,6 +8,8 @@ Export and archive Telegram channels into a static HTML reader with tag-based na
 
 Built on top of [tdl](https://github.com/iyear/tdl) for Telegram data export.
 
+![TeleShelf Reader](docs/reader-screenshot.png)
+
 ## Features
 
 - **Multi-channel support** — add any number of Telegram channels, each with its own config
@@ -16,7 +18,7 @@ Built on top of [tdl](https://github.com/iyear/tdl) for Telegram data export.
 - **Tag system** — AI-generated tags per post with sidebar filtering
 - **Dark mode** — toggle between light and dark themes
 - **Thread support** — export and display comment threads
-- **Read tracking** — posts are marked as read on scroll (persisted in localStorage)
+- **Read tracking** — posts marked as read on expand, persisted in localStorage
 
 ## Prerequisites
 
@@ -47,7 +49,11 @@ choco install go-task
 winget install Task.Task
 ```
 
-**Python** — 3.10+ is required (uses `match` statements). No pip dependencies needed.
+**Python dependencies:**
+
+```bash
+pip install -r requirements.txt
+```
 
 **Claude Code** (optional) — if installed, `task sync` will auto-tag new posts using Claude:
 
@@ -58,11 +64,11 @@ npm install -g @anthropic-ai/claude-code
 ## Quick Start
 
 ```bash
-# 1. Add a channel (resolves IDs from any Telegram post URL)
-task add-channel -- my-channel "https://t.me/somechannel/42"
+# 1. Add a channel (auto-resolves IDs and slug from any Telegram post URL)
+task add-channel -- "https://t.me/somechannel/42"
 
 # 2. Sync messages and media
-task sync -- my-channel
+task sync -- somechannel
 
 # 3. Open the reader
 open reader/index.html
@@ -71,21 +77,22 @@ open reader/index.html
 ### URL formats for `add-channel`
 
 ```bash
-# Public channel
-task add-channel -- my-channel "https://t.me/username/123"
+# Public channel — slug auto-derived from username
+task add-channel -- "https://t.me/username/123"
 
-# Private channel
+# Private channel — slug required (no username in URL)
 task add-channel -- my-channel "https://t.me/c/1234567890/123"
 
 # With comment thread auto-detection
-task add-channel -- my-channel "https://t.me/username/123?comment=456"
+task add-channel -- "https://t.me/username/123?comment=456"
 ```
 
 ## How It Works
 
-1. **`task add-channel`** creates a directory under `downloads/<slug>/` with a `channel.json` config
-2. **`task sync`** exports new messages via `tdl`, merges them into `all-messages.json`, downloads media, optionally tags posts, and rebuilds the reader
-3. **`task build-reader`** generates `reader/index.html` — a self-contained static page with all channels
+1. **`task add-channel`** — creates a directory under `downloads/<slug>/` with a `channel.json` config. For public channels, the slug is auto-derived from the username.
+2. **`task sync`** — exports new messages via `tdl`, merges them into `all-messages.json`, downloads media, optionally tags posts with AI, and rebuilds the reader.
+3. **`task sync-all`** — syncs all channels in one go, builds the reader once at the end.
+4. **`task build-reader`** — generates `reader/index.html` — a self-contained static page with all channels.
 
 ## Project Structure
 
