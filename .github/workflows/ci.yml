@@ -1,0 +1,95 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-reader:
+    name: Build reader with mock data
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Create mock channel data
+        run: |
+          mkdir -p downloads/test-channel/channel-full
+          mkdir -p downloads/test-channel/threads
+
+          cat > downloads/test-channel/channel.json << 'EOF'
+          {
+            "channel_id": "1234567890",
+            "discussion_group_id": "9876543210",
+            "name": "Test Channel"
+          }
+          EOF
+
+          cat > downloads/test-channel/tags.json << 'EOF'
+          {
+            "1": ["python", "тесты"],
+            "2": ["ci", "github-actions"],
+            "3": ["javascript"]
+          }
+          EOF
+
+          cat > downloads/test-channel/channel-full/all-messages.json << 'EOF'
+          {
+            "id": 1234567890,
+            "messages": [
+              {
+                "id": 1,
+                "date": 1708000000,
+                "text": "First test post with some text content for the reader.",
+                "file": ""
+              },
+              {
+                "id": 2,
+                "date": 1708100000,
+                "text": "Second post with a link https://example.com and more text.\n\nSecond paragraph here.",
+                "file": "abc123.jpg"
+              },
+              {
+                "id": 3,
+                "date": 1708200000,
+                "text": "Third post to test multiple messages in the reader.",
+                "file": ""
+              }
+            ]
+          }
+          EOF
+
+          cat > downloads/test-channel/threads/thread-1.json << 'EOF'
+          {
+            "id": 9876543210,
+            "messages": [
+              {
+                "id": 101,
+                "date": 1708050000,
+                "text": "A comment on the first post."
+              }
+            ]
+          }
+          EOF
+
+      - name: Build reader
+        run: python3 scripts/build_reader.py
+
+      - name: Verify reader output
+        run: |
+          test -f reader/index.html
+          grep -q "Test Channel" reader/index.html
+          grep -q "First test post" reader/index.html
+          grep -q "<style>" reader/index.html
+          grep -q "<script>" reader/index.html
+          echo "Reader build verified successfully."

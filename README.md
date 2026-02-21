@@ -1,5 +1,6 @@
 # TeleShelf
 
+[![CI](https://github.com/aprudkin/TeleShelf/actions/workflows/ci.yml/badge.svg)](https://github.com/aprudkin/TeleShelf/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![Task](https://img.shields.io/badge/Task-Automation-purple.svg)](https://taskfile.dev/)
