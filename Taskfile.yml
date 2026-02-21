@@ -1,6 +1,7 @@
 version: '3'
 
 vars:
+  INSTALL_DIR: "{{.TELESHELF_INSTALL_DIR | default .ROOT_DIR}}"
   DOWNLOADS_DIR: "{{.ROOT_DIR}}/downloads"
 
 tasks:
@@ -362,7 +363,7 @@ tasks:
       if [[ -z "${SKIP_READER:-}" ]]; then
         echo ""
         echo "Building reader..."
-        python3 "{{.ROOT_DIR}}/scripts/build_reader.py"
+        python3 "{{.INSTALL_DIR}}/scripts/build_reader.py"
         echo ""
         echo "Sync complete for '$SLUG'."
         echo "  open {{.ROOT_DIR}}/reader/index.html"
@@ -408,7 +409,7 @@ tasks:
       echo "========================================="
       echo "Building reader..."
       echo "========================================="
-      python3 "{{.ROOT_DIR}}/scripts/build_reader.py"
+      python3 "{{.INSTALL_DIR}}/scripts/build_reader.py"
 
       # Summary
       echo ""
@@ -429,7 +430,7 @@ tasks:
       combined in a single page with a channel switcher dropdown.
     silent: true
     cmd: |
-      python3 "{{.ROOT_DIR}}/scripts/build_reader.py"
+      python3 "{{.INSTALL_DIR}}/scripts/build_reader.py"
       echo ""
       echo "Reader ready! Open:"
       echo "  open {{.ROOT_DIR}}/reader/index.html"
