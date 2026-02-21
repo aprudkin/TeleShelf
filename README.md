@@ -20,7 +20,25 @@ Built on top of [tdl](https://github.com/iyear/tdl) for Telegram data export.
 - **Thread support** — export and display comment threads
 - **Read tracking** — posts marked as read on expand, persisted in localStorage
 
-## Prerequisites
+## Installation
+
+### Homebrew (macOS)
+
+```bash
+brew tap aprudkin/teleshelf
+brew install teleshelf
+```
+
+Then install [tdl](https://github.com/iyear/tdl) for Telegram export:
+
+```bash
+brew install iyear/tap/tdl
+tdl login
+```
+
+This installs the `teleshelf` command globally. Channel data is stored in `~/TeleShelf/`.
+
+### Manual
 
 | Tool | Version | Description |
 |------|---------|-------------|
@@ -29,62 +47,39 @@ Built on top of [tdl](https://github.com/iyear/tdl) for Telegram data export.
 | [Python](https://www.python.org/) | 3.10+ | Reader generator script |
 | [Claude Code](https://claude.ai/claude-code) | latest | *Optional.* Auto-tagging during sync |
 
-### Install dependencies
-
-**tdl** — follow [tdl installation guide](https://docs.iyear.me/tdl/getting-started/installation/). After install, authenticate:
-
 ```bash
-tdl login
-```
-
-**[Task](https://taskfile.dev/)** (macOS / Windows):
-
-```bash
-# macOS
-brew install go-task
-
-# Windows
-choco install go-task
-# or
-winget install Task.Task
-```
-
-**Python dependencies:**
-
-```bash
+git clone https://github.com/aprudkin/TeleShelf.git
+cd TeleShelf
 pip install -r requirements.txt
-```
-
-**Claude Code** (optional) — if installed, `task sync` will auto-tag new posts using Claude:
-
-```bash
-npm install -g @anthropic-ai/claude-code
+tdl login
 ```
 
 ## Quick Start
 
 ```bash
 # 1. Add a channel (auto-resolves IDs and slug from any Telegram post URL)
-task add-channel -- "https://t.me/somechannel/42"
+teleshelf add-channel -- "https://t.me/somechannel/42"
 
 # 2. Sync messages and media
-task sync -- somechannel
+teleshelf sync -- somechannel
 
 # 3. Open the reader
-open reader/index.html
+open ~/TeleShelf/reader/index.html
 ```
+
+> **Manual install?** Use `task` instead of `teleshelf` and run from the project directory.
 
 ### URL formats for `add-channel`
 
 ```bash
 # Public channel — slug auto-derived from username
-task add-channel -- "https://t.me/username/123"
+teleshelf add-channel -- "https://t.me/username/123"
 
 # Private channel — slug required (no username in URL)
-task add-channel -- my-channel "https://t.me/c/1234567890/123"
+teleshelf add-channel -- my-channel "https://t.me/c/1234567890/123"
 
 # With comment thread auto-detection
-task add-channel -- "https://t.me/username/123?comment=456"
+teleshelf add-channel -- "https://t.me/username/123?comment=456"
 ```
 
 ## How It Works
