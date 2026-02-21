@@ -1,0 +1,37 @@
+{# ── Post list row (compact) ── #}
+{% macro post_row(post) %}
+<div class="row"
+     data-slug="{{ post.slug }}"
+     data-post-id="{{ post.id }}"
+     data-tags="{{ post.tags_str }}"
+     data-search-text="{{ post.search_text }}">
+  <span class="new-dot"></span>
+  <div class="row-channel">
+    <span class="row-channel-dot" style="background:{{ post.channel_color }}"></span>
+    <span class="row-channel-name">{{ post.channel_name }}</span>
+  </div>
+  <span class="row-title">{{ post.title }}</span>
+  {% if post.preview %}<span class="row-preview"> — {{ post.preview }}</span>{% endif %}
+  <span class="row-icons">
+    {% if post.media_icon_class %}<span class="icon {{ post.media_icon_class }}"></span>{% endif %}
+  </span>
+  <span class="row-date">{{ post.date_compact }}</span>
+</div>
+<div class="expanded-post">
+  <div class="post-meta">
+    <span class="post-id">#{{ post.id }}</span>
+    <span>{{ post.date_full }}</span>
+    <span style="color:{{ post.channel_color }}">{{ post.channel_name }}</span>
+  </div>
+  {{ post.media_html }}
+  <div class="post-body">{{ post.text_html }}</div>
+  {% if post.tags %}
+  <div class="post-tags">
+    {% for tag in post.tags %}
+    <span class="tag-badge" data-tag="{{ tag }}">{{ tag }}</span>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {{ post.thread_html }}
+</div>
+{% endmacro %}

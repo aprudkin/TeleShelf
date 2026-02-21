@@ -1,0 +1,435 @@
+version: '3'
+
+vars:
+  DOWNLOADS_DIR: "{{.ROOT_DIR}}/downloads"
+
+tasks:
+  add-channel:
+    desc: Create a new channel directory structure with config
+    summary: |
+      Usage: task add-channel -- <url>
+             task add-channel -- <slug> <url>
+
+      Creates the directory structure and channel.json for a new Telegram channel export.
+      Accepts any Telegram post URL and resolves IDs automatically.
+
+      For public channels (t.me/<username>/...), the slug is auto-derived from the
+      username. You'll be prompted to confirm or override it.
+
+      For private channels (t.me/c/<id>/...), you must provide the slug explicitly.
+
+      Supported URL formats:
+        Public:  https://t.me/<username>/<post-id>
+        Private: https://t.me/c/<channel-id>/<post-id>
+        With comments: append ?comment=<id> to auto-detect discussion group
+
+      Examples:
+        task add-channel -- "https://t.me/seeallochnaya/3412"
+        task add-channel -- "https://t.me/somechannel/42?comment=100"
+        task add-channel -- my-channel "https://t.me/c/1234567890/154"
+    silent: true
+    cmd: |
+      set -eo pipefail
+
+      ARGS=({{.CLI_ARGS}})
+      ARG1="${ARGS[0]:-}"
+      ARG2="${ARGS[1]:-}"
+
+      if [[ -z "$ARG1" ]]; then
+        echo "Error: URL is required."
+        echo "Usage: task add-channel -- <url>"
+        echo "       task add-channel -- <slug> <url>"
+        exit 1
+      fi
+
+      # Detect if ARG1 is a URL or a slug
+      if [[ "$ARG1" =~ ^https?:// ]]; then
+        # Single arg: URL only — derive slug from username
+        URL="$ARG1"
+
+        # Check if public URL to extract username
+        DERIVED_SLUG=$(python3 -c "
+      import re, sys
+      url = sys.argv[1]
+      m = re.match(r'https?://t\.me/([a-zA-Z][a-zA-Z0-9_]{3,})/(\d+)', url)
+      if m:
+          # Convert username to slug: lowercase, replace _ with -
+          print(m.group(1).lower().replace('_', '-'))
+      else:
+          print('')
+      " "$URL")
+
+        if [[ -z "$DERIVED_SLUG" ]]; then
+          echo "Error: Private URLs require an explicit slug."
+          echo "Usage: task add-channel -- <slug> \"https://t.me/c/<id>/<post>\""
+          exit 1
+        fi
+
+        printf "Suggested slug: %s. Press Enter to confirm or type a custom slug: " "$DERIVED_SLUG"
+        read -r CUSTOM_SLUG </dev/tty 2>/dev/null || CUSTOM_SLUG=""
+        if [[ -n "$CUSTOM_SLUG" ]]; then
+          SLUG="$CUSTOM_SLUG"
+        else
+          SLUG="$DERIVED_SLUG"
+        fi
+      else
+        # Two args: slug + URL
+        SLUG="$ARG1"
+        URL="$ARG2"
+        if [[ -z "$URL" ]]; then
+          echo "Error: URL is required when providing a slug."
+          echo "Usage: task add-channel -- <slug> <url>"
+          exit 1
+        fi
+      fi
+
+      if [[ ! "$SLUG" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+        echo "Error: slug must contain only letters, digits, hyphens, and underscores."
+        exit 1
+      fi
+
+      # Parse URL into components: url_type (private|public), identifier, post_id, has_comment
+      eval "$(python3 -c "
+      import re, sys
+      url = sys.argv[1]
+
+      # Private: t.me/c/<id>/<post>
+      m = re.match(r'https?://t\.me/c/(\d+)/(\d+)', url)
+      if m:
+          print(f'URL_TYPE=private')
+          print(f'URL_IDENT={m.group(1)}')
+          print(f'POST_ID={m.group(2)}')
+          print(f'HAS_COMMENT={\"1\" if \"comment=\" in url else \"\"}')
+          sys.exit(0)
+
+      # Public: t.me/<username>/<post>
+      m = re.match(r'https?://t\.me/([a-zA-Z][a-zA-Z0-9_]{3,})/(\d+)', url)
+      if m:
+          print(f'URL_TYPE=public')
+          print(f'URL_IDENT={m.group(1)}')
+          print(f'POST_ID={m.group(2)}')
+          print(f'HAS_COMMENT={\"1\" if \"comment=\" in url else \"\"}')
+          sys.exit(0)
+
+      print('URL_TYPE=unknown')
+      sys.exit(1)
+      " "$URL")"
+
+      if [[ "$URL_TYPE" == "unknown" ]]; then
+        echo "Error: could not parse URL: $URL"
+        echo "Expected: https://t.me/c/<id>/<post> or https://t.me/<username>/<post>"
+        exit 1
+      fi
+
+      echo "URL type: $URL_TYPE"
+
+      CHANNEL_ID=""
+      DISCUSSION_GROUP_ID=""
+      TEMP_DIR="/tmp/teleshelf-add-$$"
+      mkdir -p "$TEMP_DIR"
+
+      if [[ "$URL_TYPE" == "private" ]]; then
+        CHANNEL_ID="$URL_IDENT"
+        echo "Channel ID: $CHANNEL_ID (from URL)"
+      else
+        # Public channel: resolve username -> numeric ID via tdl
+        echo "Resolving $URL_IDENT -> numeric ID via tdl..."
+        tdl chat export -c "$URL_IDENT" --all --with-content -T id -i "$POST_ID" -i "$POST_ID" -o "$TEMP_DIR/resolve.json"
+
+        CHANNEL_ID=$(python3 -c "
+        import json, sys
+        d = json.load(open(sys.argv[1]))
+        print(d['id'], end='')
+        " "$TEMP_DIR/resolve.json")
+
+        if [[ -z "$CHANNEL_ID" ]]; then
+          echo "Error: could not resolve channel ID for $URL_IDENT"
+          rm -rf "$TEMP_DIR"
+          exit 1
+        fi
+        echo "Channel ID: $CHANNEL_ID (resolved from @$URL_IDENT)"
+      fi
+
+      # If URL has ?comment=, resolve discussion group ID via thread export
+      if [[ -n "$HAS_COMMENT" ]]; then
+        echo "Resolving discussion group ID via thread export..."
+        tdl chat export -c "$CHANNEL_ID" --all --with-content --reply "$POST_ID" -T id -i 1 -i 1 -o "$TEMP_DIR/thread.json"
+
+        DISCUSSION_GROUP_ID=$(python3 -c "
+        import json, sys
+        d = json.load(open(sys.argv[1]))
+        cid = str(d['id'])
+        # Only set if it differs from channel ID (it's the discussion group)
+        if cid != sys.argv[2]:
+            print(cid, end='')
+        else:
+            print('', end='')
+        " "$TEMP_DIR/thread.json" "$CHANNEL_ID")
+
+        if [[ -n "$DISCUSSION_GROUP_ID" ]]; then
+          echo "Discussion Group ID: $DISCUSSION_GROUP_ID (from thread export)"
+        else
+          echo "Warning: could not detect a separate discussion group."
+        fi
+      fi
+
+      rm -rf "$TEMP_DIR"
+
+      CHANNEL_DIR="{{.DOWNLOADS_DIR}}/$SLUG"
+
+      if [[ -d "$CHANNEL_DIR" ]]; then
+        echo "Error: Channel directory already exists: $CHANNEL_DIR"
+        exit 1
+      fi
+
+      echo "Creating channel directory structure at: $CHANNEL_DIR"
+      mkdir -p "$CHANNEL_DIR/channel-full" \
+               "$CHANNEL_DIR/channel-main" \
+               "$CHANNEL_DIR/threads" \
+               "$CHANNEL_DIR/threads-media" \
+               "$CHANNEL_DIR/channel-threads-media"
+
+      python3 -c "
+      import json, sys
+      config = {
+          'channel_id': sys.argv[1],
+          'name': sys.argv[2]
+      }
+      dgid = sys.argv[3]
+      if dgid:
+          config['discussion_group_id'] = dgid
+      with open(sys.argv[4] + '/channel.json', 'w') as f:
+          json.dump(config, f, indent=2)
+          f.write('\n')
+      " "$CHANNEL_ID" "$SLUG" "$DISCUSSION_GROUP_ID" "$CHANNEL_DIR"
+
+      python3 -c "
+      import json, sys
+      with open(sys.argv[1] + '/channel-full/all-messages.json', 'w') as f:
+          json.dump({'messages': []}, f, indent=2)
+          f.write('\n')
+      " "$CHANNEL_DIR"
+
+      echo ""
+      echo "Channel '$SLUG' created successfully!"
+      echo ""
+      echo "Directory structure:"
+      echo "  $CHANNEL_DIR/"
+      echo "  $CHANNEL_DIR/channel-full/all-messages.json"
+      echo "  $CHANNEL_DIR/channel-main/"
+      echo "  $CHANNEL_DIR/threads/"
+      echo "  $CHANNEL_DIR/threads-media/"
+      echo "  $CHANNEL_DIR/channel-threads-media/"
+      echo "  $CHANNEL_DIR/channel.json"
+      echo ""
+      echo "Next steps:"
+      echo "  1. Export messages:  task sync -- $SLUG"
+      echo "  2. Or manually:     tdl chat export -c $CHANNEL_ID --all --with-content -T id -i 1 -i 999999 -o /tmp/teleshelf-new-posts-$SLUG.json"
+
+  sync:
+    desc: Export new messages and media from a channel
+    summary: |
+      Usage: task sync -- <slug>
+
+      Exports new messages from the channel since the last known ID,
+      merges them into all-messages.json, and downloads media files.
+
+      Arguments:
+        slug    Channel slug (directory name under downloads/)
+
+      Example:
+        task sync -- iishenka-pro
+    preconditions:
+      - sh: '[ -n "{{.CLI_ARGS}}" ]'
+        msg: "Error: slug is required. Usage: task sync -- <slug>"
+      - sh: '[ -f "{{.DOWNLOADS_DIR}}/{{.CLI_ARGS}}/channel.json" ]'
+        msg: "Error: channel.json not found at {{.DOWNLOADS_DIR}}/{{.CLI_ARGS}}/channel.json. Run 'task add-channel' first."
+      - sh: '[ -f "{{.DOWNLOADS_DIR}}/{{.CLI_ARGS}}/channel-full/all-messages.json" ]'
+        msg: "Error: all-messages.json not found at {{.DOWNLOADS_DIR}}/{{.CLI_ARGS}}/channel-full/all-messages.json"
+    silent: true
+    cmd: |
+      set -eo pipefail
+
+      SLUG="{{.CLI_ARGS}}"
+      CHANNEL_DIR="{{.DOWNLOADS_DIR}}/$SLUG"
+      CONFIG_FILE="$CHANNEL_DIR/channel.json"
+      MESSAGES_FILE="$CHANNEL_DIR/channel-full/all-messages.json"
+      TEMP_FILE="/tmp/teleshelf-new-posts-$SLUG.json"
+
+      # Read channel_id from config
+      CHANNEL_ID=$(python3 -c "import json, sys; print(json.load(open(sys.argv[1]))['channel_id'])" "$CONFIG_FILE")
+      echo "Channel: $SLUG (ID: $CHANNEL_ID)"
+
+      # Find last exported message ID
+      LAST_ID=$(python3 -c "
+      import json, sys
+      d = json.load(open(sys.argv[1]))
+      msgs = d.get('messages', [])
+      print(msgs[0]['id'] if msgs else 0)
+      " "$MESSAGES_FILE")
+      NEXT_ID=$((LAST_ID + 1))
+      echo "Last message ID: $LAST_ID, fetching from ID: $NEXT_ID"
+
+      # Export new messages
+      echo "Exporting new messages..."
+      tdl chat export -c "$CHANNEL_ID" --all --with-content -T id -i "$NEXT_ID" -i 999999 -o "$TEMP_FILE"
+
+      # Check if any new messages
+      NEW_COUNT=$(python3 -c "
+      import json, os, sys
+      if not os.path.exists(sys.argv[1]):
+          print(0)
+      else:
+          d = json.load(open(sys.argv[1]))
+          print(len(d.get('messages', [])))
+      " "$TEMP_FILE")
+
+      if [[ "$NEW_COUNT" -eq 0 ]]; then
+        echo "No new messages found."
+        rm -f "$TEMP_FILE"
+        exit 0
+      fi
+
+      echo "Found $NEW_COUNT new message(s)."
+
+      # Merge: prepend new messages (they should be sorted desc by ID)
+      python3 -c "
+      import json, sys
+
+      with open(sys.argv[1]) as f:
+          new_data = json.load(f)
+      new_msgs = new_data.get('messages', [])
+
+      with open(sys.argv[2]) as f:
+          existing_data = json.load(f)
+      existing_msgs = existing_data.get('messages', [])
+
+      # Deduplicate: skip new messages whose IDs already exist
+      existing_ids = {m['id'] for m in existing_msgs}
+      new_msgs = [m for m in new_msgs if m['id'] not in existing_ids]
+
+      # Sort new messages by ID descending
+      new_msgs.sort(key=lambda m: m['id'], reverse=True)
+
+      # Prepend new messages (they are newer, so go first in desc order)
+      merged = new_msgs + existing_msgs
+
+      existing_data['messages'] = merged
+      with open(sys.argv[2], 'w') as f:
+          json.dump(existing_data, f, indent=2, ensure_ascii=False)
+          f.write('\n')
+
+      print(f'Merged {len(new_msgs)} new message(s). Total: {len(merged)}')
+      " "$TEMP_FILE" "$MESSAGES_FILE"
+
+      # Download media for new messages that have a file field
+      MEDIA_IDS=$(python3 -c "
+      import json, sys
+      with open(sys.argv[1]) as f:
+          d = json.load(f)
+      for msg in d.get('messages', []):
+          if msg.get('file', ''):
+              print(msg['id'])
+      " "$TEMP_FILE")
+
+      if [[ -n "$MEDIA_IDS" ]]; then
+        echo "Downloading media..."
+        while IFS= read -r MSG_ID; do
+          echo "  Downloading media for message $MSG_ID..."
+          tdl dl -u "https://t.me/c/$CHANNEL_ID/$MSG_ID" -d "$CHANNEL_DIR/channel-main/" || echo "  Warning: Failed to download media for message $MSG_ID"
+        done <<< "$MEDIA_IDS"
+      else
+        echo "No media to download."
+      fi
+
+      # Clean up
+      rm -f "$TEMP_FILE"
+
+      # Tag new posts via Claude Code (if available)
+      if command -v claude &>/dev/null; then
+        echo ""
+        echo "Tagging new posts..."
+        claude -p "Read the files downloads/$SLUG/channel-full/all-messages.json and downloads/$SLUG/tags.json. Find posts whose ID is NOT a key in tags.json. For each untagged post, assign 1-4 Russian-language lowercase tags based on the post text. Reuse existing tags from tags.json where appropriate. Write the updated tags.json (same format, all posts included). Output nothing except writing the file." \
+          --allowedTools 'Read,Write' \
+          --model haiku \
+          --no-session-persistence \
+          || echo "  Warning: Tagging failed, continuing without tags."
+      else
+        echo "Skipping tagging (claude not available)."
+      fi
+
+      # Build reader (skip if called from sync-all)
+      if [[ -z "${SKIP_READER:-}" ]]; then
+        echo ""
+        echo "Building reader..."
+        python3 "{{.ROOT_DIR}}/scripts/build_reader.py"
+        echo ""
+        echo "Sync complete for '$SLUG'."
+        echo "  open {{.ROOT_DIR}}/reader/index.html"
+      else
+        echo ""
+        echo "Sync complete for '$SLUG'. (reader build skipped)"
+      fi
+
+  sync-all:
+    desc: Sync all channels
+    summary: |
+      Usage: task sync-all
+
+      Discovers all channel directories in downloads/ and syncs each one.
+      Reader is built once at the end. Continues on error.
+
+      Example:
+        task sync-all
+    silent: true
+    cmd: |
+      set -o pipefail
+
+      SUCCEEDED=0
+      FAILED=0
+      FAILED_SLUGS=""
+
+      for CONFIG in "{{.DOWNLOADS_DIR}}"/*/channel.json; do
+        [[ -f "$CONFIG" ]] || continue
+        SLUG="$(basename "$(dirname "$CONFIG")")"
+        echo "========================================="
+        echo "Syncing: $SLUG"
+        echo "========================================="
+        if SKIP_READER=1 task sync -- "$SLUG"; then
+          SUCCEEDED=$((SUCCEEDED + 1))
+        else
+          FAILED=$((FAILED + 1))
+          FAILED_SLUGS="$FAILED_SLUGS $SLUG"
+        fi
+        echo ""
+      done
+
+      # Build reader once
+      echo "========================================="
+      echo "Building reader..."
+      echo "========================================="
+      python3 "{{.ROOT_DIR}}/scripts/build_reader.py"
+
+      # Summary
+      echo ""
+      echo "========================================="
+      echo "Sync-all complete: $SUCCEEDED succeeded, $FAILED failed."
+      if [[ -n "$FAILED_SLUGS" ]]; then
+        echo "Failed channels:$FAILED_SLUGS"
+      fi
+      echo "  open {{.ROOT_DIR}}/reader/index.html"
+      echo "========================================="
+
+  build-reader:
+    desc: Generate static HTML reader for all channels
+    summary: |
+      Usage: task build-reader
+
+      Generates reader/index.html in project root with all channels
+      combined in a single page with a channel switcher dropdown.
+    silent: true
+    cmd: |
+      python3 "{{.ROOT_DIR}}/scripts/build_reader.py"
+      echo ""
+      echo "Reader ready! Open:"
+      echo "  open {{.ROOT_DIR}}/reader/index.html"

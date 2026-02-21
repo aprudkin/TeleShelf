@@ -1,0 +1,88 @@
+{% from "macros.html" import post_row %}
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TeleShelf Reader</title>
+<style>
+{{ css }}
+</style>
+</head>
+<body>
+
+<script id="channels-data" type="application/json">
+{{ channels_json }}
+</script>
+
+{# ── Sidebar ── #}
+<nav id="sidebar" class="sidebar">
+  <div class="sidebar-header">TeleShelf</div>
+  <div class="sidebar-channels">
+    <div class="channel-item active" data-view="latest">
+      <span class="channel-dot" style="background:var(--accent)"></span>
+      <span class="channel-name">Latest</span>
+      <span class="channel-count"></span>
+    </div>
+    {% for ch in channels %}
+    <div class="channel-item" data-view="{{ ch.slug }}">
+      <span class="channel-dot" style="background:{{ ch.color }}"></span>
+      <span class="channel-name">{{ ch.name }}</span>
+      <span class="channel-count"></span>
+    </div>
+    {% endfor %}
+  </div>
+  {% if all_tags %}
+  <div class="sidebar-tags">
+    <div class="sidebar-tags-label">Теги</div>
+    <div class="tag-list collapsed">
+      <button class="tag-btn active" data-tag="">все</button>
+      {% for tag_name, count in all_tags %}
+      <button class="tag-btn" data-tag="{{ tag_name }}">{{ tag_name }} <span class="tag-count">&middot;{{ count }}</span></button>
+      {% endfor %}
+    </div>
+    <button class="tag-toggle" data-total="{{ all_tags|length }}"></button>
+  </div>
+  {% endif %}
+</nav>
+
+{# ── Overlay (mobile) ── #}
+<div id="overlay" class="overlay"></div>
+
+{# ── Toolbar ── #}
+<header class="toolbar">
+  <button id="hamburger" class="hamburger" aria-label="Menu">&#9776;</button>
+  <input id="search-input" class="toolbar-search" type="text" placeholder="Поиск...">
+  <select id="tag-select" class="toolbar-tag-select">
+    <option value="">Все теги</option>
+  </select>
+  <span class="toolbar-spacer"></span>
+  <span id="counter" class="toolbar-counter"></span>
+  <button id="btn-mark-all" class="toolbar-btn">Прочитать все</button>
+  <button id="theme-toggle" class="theme-toggle" aria-label="Toggle theme"></button>
+</header>
+
+{# ── Main content ── #}
+<main id="main" class="main">
+  {# Latest (all channels merged by date desc) #}
+  <div class="feed-list" data-view="latest">
+    {% for post in all_posts %}
+    {{ post_row(post) }}
+    {% endfor %}
+  </div>
+
+  {# Per-channel lists #}
+  {% for ch in channels %}
+  <div class="feed-list" data-view="{{ ch.slug }}" style="display:none">
+    {% for post in ch.posts %}
+    {{ post_row(post) }}
+    {% endfor %}
+  </div>
+  {% endfor %}
+</main>
+
+<script>
+{{ js }}
+</script>
+</body>
+</html>
