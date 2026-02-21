@@ -23,7 +23,7 @@ Built on top of [tdl](https://github.com/iyear/tdl) for Telegram data export.
 
 ## Installation
 
-### Homebrew (macOS)
+### Homebrew (macOS / Linux / WSL)
 
 ```bash
 brew tap aprudkin/teleshelf
@@ -38,6 +38,8 @@ tdl login
 ```
 
 This installs the `teleshelf` command globally. Channel data is stored in `~/TeleShelf/`.
+
+**Windows:** Install [WSL](https://learn.microsoft.com/en-us/windows/wsl/install) first (`wsl --install`), then run the brew commands above inside WSL.
 
 ### Manual
 
