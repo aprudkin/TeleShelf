@@ -240,4 +240,15 @@ Tags are stored in `tags.json` per channel — a flat JSON object mapping post I
 
 ---
 
+## Versioning
+
+Version is tracked via **git tags only** (no version file). Format: `vMAJOR.MINOR.PATCH` (semver).
+
+After completing a bugfix or feature:
+1. Remind the user to bump the version
+2. If approved: `git tag vX.Y.Z -m "<type>: <description>"`
+3. If Homebrew formula needs updating, note that too
+
+---
+
 *Updated: 2026-02-22*
