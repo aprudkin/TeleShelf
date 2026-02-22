@@ -65,16 +65,9 @@ def escape(text: str) -> str:
     return html.escape(text, quote=True)
 
 
-def format_text(text: str) -> str:
-    if not text:
-        return ""
-    escaped = escape(text)
-    escaped = re.sub(
-        r'(https?://[^\s<>&]+)',
-        r'<a href="\1" target="_blank" rel="noopener noreferrer">\1</a>',
-        escaped,
-    )
-    paragraphs = re.split(r'\n{2,}', escaped)
+def _wrap_paragraphs(html_text: str) -> str:
+    """Split on double newlines into <p> tags, single newlines to <br>."""
+    paragraphs = re.split(r'\n{2,}', html_text)
     parts = []
     for p in paragraphs:
         p = p.strip()
@@ -82,6 +75,109 @@ def format_text(text: str) -> str:
             inner = p.replace("\n", "<br>\n")
             parts.append(f"<p>{inner}</p>")
     return "\n".join(parts)
+
+
+def _apply_inline_entities(text: str, entities: list) -> str:
+    """Apply inline entities (text_link, url, mention) to text, returning HTML."""
+    renderable = [e for e in entities if e["type"] in ("text_link", "url", "mention")]
+    renderable.sort(key=lambda e: e["offset"])
+
+    parts = []
+    pos = 0
+    for ent in renderable:
+        offset = ent["offset"]
+        length = ent["length"]
+        if offset < pos:
+            continue  # skip overlapping
+
+        # Text before entity
+        if offset > pos:
+            parts.append(escape(text[pos:offset]))
+
+        ent_text = text[offset:offset + length]
+        if ent["type"] == "text_link":
+            url = html.escape(ent["url"], quote=True)
+            parts.append(f'<a href="{url}" target="_blank" rel="noopener noreferrer">{escape(ent_text)}</a>')
+        elif ent["type"] == "url":
+            parts.append(f'<a href="{escape(ent_text)}" target="_blank" rel="noopener noreferrer">{escape(ent_text)}</a>')
+        elif ent["type"] == "mention":
+            username = ent_text.lstrip("@")
+            parts.append(f'<a href="https://t.me/{html.escape(username, quote=True)}" target="_blank" rel="noopener noreferrer">{escape(ent_text)}</a>')
+
+        pos = offset + length
+
+    # Remaining text
+    if pos < len(text):
+        parts.append(escape(text[pos:]))
+
+    return "".join(parts)
+
+
+def format_text(text: str, entities: list | None = None) -> str:
+    if not text:
+        return ""
+
+    # Fallback: no entities — use bare-URL regex (backwards compatible)
+    if not entities:
+        escaped = escape(text)
+        escaped = re.sub(
+            r'(https?://[^\s<>&]+)',
+            r'<a href="\1" target="_blank" rel="noopener noreferrer">\1</a>',
+            escaped,
+        )
+        return _wrap_paragraphs(escaped)
+
+    # Entity-based rendering
+    blockquotes = [e for e in entities if e["type"] == "blockquote"]
+    inline_ents = [e for e in entities if e["type"] in ("text_link", "url", "mention")]
+    blockquotes.sort(key=lambda e: e["offset"])
+
+    # Split text into regions: blockquote vs non-blockquote
+    regions = []  # (is_blockquote, region_text, region_inline_entities)
+    pos = 0
+
+    for bq in blockquotes:
+        bq_start = bq["offset"]
+        bq_end = bq_start + bq["length"]
+
+        if bq_start > pos:
+            region_text = text[pos:bq_start]
+            region_ents = [
+                {**e, "offset": e["offset"] - pos}
+                for e in inline_ents
+                if e["offset"] >= pos and e["offset"] + e["length"] <= bq_start
+            ]
+            regions.append((False, region_text, region_ents))
+
+        bq_text = text[bq_start:bq_end]
+        bq_ents = [
+            {**e, "offset": e["offset"] - bq_start}
+            for e in inline_ents
+            if e["offset"] >= bq_start and e["offset"] + e["length"] <= bq_end
+        ]
+        regions.append((True, bq_text, bq_ents))
+        pos = bq_end
+
+    if pos < len(text):
+        region_text = text[pos:]
+        region_ents = [
+            {**e, "offset": e["offset"] - pos}
+            for e in inline_ents
+            if e["offset"] >= pos
+        ]
+        regions.append((False, region_text, region_ents))
+
+    # Render each region
+    html_parts = []
+    for is_bq, region_text, region_ents in regions:
+        inner = _apply_inline_entities(region_text, region_ents)
+        wrapped = _wrap_paragraphs(inner)
+        if is_bq:
+            html_parts.append(f"<blockquote>{wrapped}</blockquote>")
+        else:
+            html_parts.append(wrapped)
+
+    return "\n".join(html_parts)
 
 
 def file_ext(filename: str) -> str:
@@ -139,7 +235,7 @@ def render_thread_message(msg: dict) -> str:
     if file_field:
         parts.append(f'<div class="thread-file">{escape(file_field)}</div>')
     if text:
-        parts.append(f'<div class="thread-text">{format_text(text)}</div>')
+        parts.append(f'<div class="thread-text">{format_text(text, msg.get("entities"))}</div>')
     parts.append('</div>')
     return "\n".join(parts)
 
@@ -240,7 +336,7 @@ def prepare_post(msg: dict, channel: dict, media_base: str, channel_color: str) 
         "date_compact": compact_date(date_ts),
         "date_full": format_date(date_ts),
         "date_ts": date_ts,
-        "text_html": format_text(text),
+        "text_html": format_text(text, msg.get("entities")),
         "media_html": get_media_html(media_base, channel_id, pid, file_field),
         "media_icon_class": media_icon_class(file_field),
         "tags": post_tags,
