@@ -273,7 +273,7 @@ tasks:
 
       # Export new messages
       echo "Exporting new messages..."
-      tdl chat export -c "$CHANNEL_ID" --all --with-content -T id -i "$NEXT_ID" -i 999999 -o "$TEMP_FILE"
+      tdl chat export -c "$CHANNEL_ID" --all --with-content --raw -T id -i "$NEXT_ID" -i 999999 -o "$TEMP_FILE"
 
       # Check if any new messages
       NEW_COUNT=$(python3 -c "
@@ -292,6 +292,10 @@ tasks:
       fi
 
       echo "Found $NEW_COUNT new message(s)."
+
+      # Extract entities from raw export
+      echo "Extracting entities..."
+      python3 "{{.INSTALL_DIR}}/scripts/extract_entities.py" "$TEMP_FILE"
 
       # Merge: prepend new messages (they should be sorted desc by ID)
       python3 -c "
@@ -415,6 +419,118 @@ tasks:
       echo ""
       echo "========================================="
       echo "Sync-all complete: $SUCCEEDED succeeded, $FAILED failed."
+      if [[ -n "$FAILED_SLUGS" ]]; then
+        echo "Failed channels:$FAILED_SLUGS"
+      fi
+      echo "  open {{.ROOT_DIR}}/reader/index.html"
+      echo "========================================="
+
+  re-export:
+    desc: Re-export all messages with entities for a channel
+    summary: |
+      Usage: task re-export -- <slug>
+
+      Re-exports all messages from a channel with --raw flag to recover
+      entity data (links, blockquotes). Updates existing all-messages.json
+      by merging entity data into existing messages.
+    preconditions:
+      - sh: '[ -n "{{.CLI_ARGS}}" ]'
+        msg: "Error: slug is required. Usage: task re-export -- <slug>"
+      - sh: '[ -f "{{.DOWNLOADS_DIR}}/{{.CLI_ARGS}}/channel.json" ]'
+        msg: "Error: channel.json not found"
+      - sh: '[ -f "{{.DOWNLOADS_DIR}}/{{.CLI_ARGS}}/channel-full/all-messages.json" ]'
+        msg: "Error: all-messages.json not found"
+    silent: true
+    cmd: |
+      set -eo pipefail
+
+      SLUG="{{.CLI_ARGS}}"
+      CHANNEL_DIR="{{.DOWNLOADS_DIR}}/$SLUG"
+      CONFIG_FILE="$CHANNEL_DIR/channel.json"
+      MESSAGES_FILE="$CHANNEL_DIR/channel-full/all-messages.json"
+      TEMP_FILE="/tmp/teleshelf-reexport-$SLUG.json"
+
+      CHANNEL_ID=$(python3 -c "import json, sys; print(json.load(open(sys.argv[1]))['channel_id'])" "$CONFIG_FILE")
+      echo "Re-exporting: $SLUG (ID: $CHANNEL_ID)"
+
+      # Export ALL messages with --raw
+      echo "Exporting all messages with --raw..."
+      tdl chat export -c "$CHANNEL_ID" --all --with-content --raw -T id -i 1 -i 999999 -o "$TEMP_FILE"
+
+      # Extract entities
+      echo "Extracting entities..."
+      python3 "{{.INSTALL_DIR}}/scripts/extract_entities.py" "$TEMP_FILE"
+
+      # Merge entities into existing messages (update existing, add new)
+      python3 -c "
+      import json, sys
+
+      with open(sys.argv[1]) as f:
+          new_data = json.load(f)
+      new_msgs = {m['id']: m for m in new_data.get('messages', [])}
+
+      with open(sys.argv[2]) as f:
+          existing_data = json.load(f)
+      existing_msgs = existing_data.get('messages', [])
+
+      # Update existing messages with entities from re-export
+      updated = 0
+      for msg in existing_msgs:
+          if msg['id'] in new_msgs:
+              new_msg = new_msgs[msg['id']]
+              if 'entities' in new_msg:
+                  msg['entities'] = new_msg['entities']
+                  updated += 1
+
+      existing_data['messages'] = existing_msgs
+      with open(sys.argv[2], 'w') as f:
+          json.dump(existing_data, f, indent=2, ensure_ascii=False)
+          f.write('\n')
+
+      print(f'Updated entities for {updated} message(s).')
+      " "$TEMP_FILE" "$MESSAGES_FILE"
+
+      rm -f "$TEMP_FILE"
+      echo "Re-export complete for '$SLUG'."
+
+  re-export-all:
+    desc: Re-export all channels with entities
+    summary: |
+      Usage: task re-export-all
+
+      Re-exports all channels to recover entity data (links, blockquotes).
+      Builds reader once at the end.
+    silent: true
+    cmd: |
+      set -o pipefail
+
+      SUCCEEDED=0
+      FAILED=0
+      FAILED_SLUGS=""
+
+      for CONFIG in "{{.DOWNLOADS_DIR}}"/*/channel.json; do
+        [[ -f "$CONFIG" ]] || continue
+        SLUG="$(basename "$(dirname "$CONFIG")")"
+        echo "========================================="
+        echo "Re-exporting: $SLUG"
+        echo "========================================="
+        if task re-export -- "$SLUG"; then
+          SUCCEEDED=$((SUCCEEDED + 1))
+        else
+          FAILED=$((FAILED + 1))
+          FAILED_SLUGS="$FAILED_SLUGS $SLUG"
+        fi
+        echo ""
+      done
+
+      echo "========================================="
+      echo "Building reader..."
+      echo "========================================="
+      python3 "{{.INSTALL_DIR}}/scripts/build_reader.py"
+
+      echo ""
+      echo "========================================="
+      echo "Re-export complete: $SUCCEEDED succeeded, $FAILED failed."
       if [[ -n "$FAILED_SLUGS" ]]; then
         echo "Failed channels:$FAILED_SLUGS"
       fi
