@@ -237,6 +237,7 @@ Tags are stored in `tags.json` per channel — a flat JSON object mapping post I
 - **Channel slug:** alphanumeric with hyphens and underscores only (`^[a-zA-Z0-9_-]+$`)
 - **Tags in tags.json:** 1-4 Russian lowercase tags per post
 - **Reader output:** `reader/index.html` — combined reader for all channels
+- **Taskfile.yml is for end users only:** tasks must be user-facing operations (sync, build-reader, add-channel, re-export). Developer/CI automation (releases, formula updates, linting) goes in GitHub Actions or global `~/Taskfile.yml`
 
 ---
 
@@ -246,8 +247,8 @@ Version is tracked via **git tags only** (no version file). Format: `vMAJOR.MINO
 
 After completing a bugfix or feature:
 1. Remind the user to bump the version
-2. If approved: `git tag vX.Y.Z -m "<type>: <description>"`
-3. If Homebrew formula needs updating, note that too
+2. If approved: `git tag vX.Y.Z -m "<type>: <description>"` + `git push origin vX.Y.Z`
+3. Homebrew formula updates automatically via `.github/workflows/release.yml` on tag push
 
 ---
 
