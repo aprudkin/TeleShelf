@@ -331,6 +331,12 @@ a:hover { text-decoration: underline; }
 .expanded-post .post-body p { margin-bottom: 0.7em; }
 .expanded-post .post-body p:last-child { margin-bottom: 0; }
 .expanded-post .post-body a { word-break: break-all; }
+.post-body blockquote {
+  border-left: 3px solid var(--accent);
+  padding: 4px 12px;
+  margin: 8px 0;
+  color: var(--text-muted);
+}
 
 /* Post tags */
 .post-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 10px; }
