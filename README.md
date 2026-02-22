@@ -1,9 +1,12 @@
 # TeleShelf
 
 [![CI](https://github.com/aprudkin/TeleShelf/actions/workflows/ci.yml/badge.svg)](https://github.com/aprudkin/TeleShelf/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/aprudkin/TeleShelf)](https://github.com/aprudkin/TeleShelf/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Homebrew](https://img.shields.io/badge/Homebrew-tap-orange.svg)](https://github.com/aprudkin/homebrew-teleshelf)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![Task](https://img.shields.io/badge/Task-Automation-purple.svg)](https://taskfile.dev/)
+[![Built with Claude Code](https://img.shields.io/badge/Built%20with-Claude%20Code-blueviolet)](https://claude.ai/claude-code)
 
 Export and archive Telegram channels into a static HTML reader with tag-based navigation, dark mode, and multi-channel support.
 
