@@ -240,4 +240,31 @@ Tags are stored in `tags.json` per channel — a flat JSON object mapping post I
 
 ---
 
-*Updated: 2026-02-21*
+## GitHub Issue Tracking
+
+Every non-trivial task must be tracked as a GitHub issue.
+
+### When to create an issue
+- Features, bugfixes, refactors — anything that will result in a commit
+- Skip for: questions, research, exploration, trivial one-line fixes, brainstorming sessions
+
+### How to create
+```bash
+gh issue create --title "<imperative English title, <70 chars>" --body "<1-3 bullet points describing scope>"
+```
+
+### Commit convention
+- Reference the issue in every commit message: `Closes #N`
+- A PostToolUse hook automatically closes the issue when the commit runs
+
+### Workflow
+1. Evaluate if the task is non-trivial
+2. Create a GitHub issue via `gh issue create`
+3. Note the issue number
+4. Implement the task
+5. Include `Closes #N` in the commit message
+6. Hook auto-closes the issue on commit
+
+---
+
+*Updated: 2026-02-22*

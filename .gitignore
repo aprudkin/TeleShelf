@@ -4,9 +4,6 @@ downloads/
 # Generated reader (rebuild with: task build-reader)
 reader/
 
-# Design documents
-docs/plans/
-
 # Temp files
 /tmp/
 *.pyc
