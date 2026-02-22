@@ -1,0 +1,46 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  update-homebrew:
+    name: Update Homebrew formula
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Get tag version
+        id: tag
+        run: echo "version=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+
+      - name: Download tarball and compute SHA256
+        id: sha
+        run: |
+          URL="https://github.com/${{ github.repository }}/archive/refs/tags/${{ steps.tag.outputs.version }}.tar.gz"
+          SHA=$(curl -sL "$URL" | sha256sum | cut -d' ' -f1)
+          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+
+      - name: Update Homebrew formula
+        uses: actions/checkout@v4
+        with:
+          repository: aprudkin/homebrew-teleshelf
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+
+      - name: Patch formula
+        run: |
+          cd homebrew-tap
+          sed -i 's|url "https://github.com/aprudkin/TeleShelf/archive/refs/tags/v.*\.tar\.gz"|url "${{ steps.sha.outputs.url }}"|' Formula/teleshelf.rb
+          sed -i 's|sha256 ".*"|sha256 "${{ steps.sha.outputs.sha256 }}"|' Formula/teleshelf.rb
+
+      - name: Commit and push
+        run: |
+          cd homebrew-tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/teleshelf.rb
+          git diff --cached --quiet && echo "No changes" && exit 0
+          git commit -m "chore: bump formula to ${{ steps.tag.outputs.version }}"
+          git push
