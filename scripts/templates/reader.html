@@ -24,6 +24,11 @@
       <span class="channel-name">Latest</span>
       <span class="channel-count"></span>
     </div>
+    <div class="channel-item" data-view="starred">
+      <span class="channel-dot" style="background:var(--accent)">&#9733;</span>
+      <span class="channel-name">Starred</span>
+      <span class="channel-count"></span>
+    </div>
     {% for ch in channels %}
     <div class="channel-item" data-view="{{ ch.slug }}">
       <span class="channel-dot" style="background:{{ ch.color }}"></span>
@@ -56,6 +61,7 @@
   <select id="tag-select" class="toolbar-tag-select">
     <option value="">Все теги</option>
   </select>
+  <button id="btn-starred" class="toolbar-btn" aria-label="Show starred only">&#9733; Starred</button>
   <span class="toolbar-spacer"></span>
   <span id="counter" class="toolbar-counter"></span>
   <button id="btn-mark-all" class="toolbar-btn">Прочитать все</button>

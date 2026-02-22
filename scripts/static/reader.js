@@ -10,6 +10,44 @@
   var states = {};
   var readSets = {};
 
+  // ── Starred state (global, cross-channel) ──
+  var starredSet = {};
+  (function() {
+    try {
+      var raw = localStorage.getItem("reader-starred");
+      if (raw) starredSet = JSON.parse(raw);
+    } catch(e) {}
+  })();
+
+  function starKey(slug, postId) { return slug + ":" + postId; }
+
+  function isStarred(slug, postId) {
+    return !!starredSet[starKey(slug, postId)];
+  }
+
+  function toggleStar(slug, postId) {
+    var key = starKey(slug, postId);
+    if (starredSet[key]) {
+      delete starredSet[key];
+    } else {
+      starredSet[key] = true;
+    }
+    try {
+      localStorage.setItem("reader-starred", JSON.stringify(starredSet));
+    } catch(e) {}
+  }
+
+  function updateStarButtons(slug, postId) {
+    var starred = isStarred(slug, postId);
+    document.querySelectorAll('.row[data-slug="' + slug + '"][data-post-id="' + postId + '"]').forEach(function(row) {
+      var btn = row.querySelector(".star-btn");
+      if (btn) {
+        btn.classList.toggle("starred", starred);
+        btn.innerHTML = starred ? "&#9733;" : "&#9734;";
+      }
+    });
+  }
+
   function storageKey(slug) {
     return "reader-" + CHANNELS[slug].channelId;
   }
@@ -54,6 +92,8 @@
   var btnMarkAll = document.getElementById("btn-mark-all");
   var counterEl = document.getElementById("counter");
   var themeToggle = document.getElementById("theme-toggle");
+  var btnStarred = document.getElementById("btn-starred");
+  var starFilterActive = false;
 
   // ── Sidebar toggle (mobile) ──
   function openSidebar() { sidebar.classList.add("open"); overlay.classList.add("open"); }
@@ -86,6 +126,7 @@
   function switchView(view) {
     if (activeView === view) return;
     activeView = view;
+    var feedView = (view === "starred") ? "latest" : view;
 
     // Update sidebar active
     document.querySelectorAll(".channel-item").forEach(function(el) {
@@ -94,7 +135,7 @@
 
     // Show/hide feed lists
     document.querySelectorAll(".feed-list").forEach(function(el) {
-      el.style.display = (el.dataset.view === view) ? "" : "none";
+      el.style.display = (el.dataset.view === feedView) ? "" : "none";
     });
 
     // Collapse all expanded posts
@@ -106,7 +147,7 @@
     });
 
     // Update tag select options for this view
-    updateTagSelect(view);
+    updateTagSelect(feedView);
 
     // Clear search
     if (searchInput) searchInput.value = "";
@@ -114,6 +155,13 @@
 
     // Clear tag filter
     clearTagFilter();
+
+    // Clear star filter, then activate if starred view
+    clearStarFilter();
+    if (view === "starred") {
+      starFilterActive = true;
+      applyStarFilter();
+    }
 
     // Scroll to top
     mainEl.scrollTop = 0;
@@ -126,6 +174,17 @@
   // ── Row click → accordion ──
   function setupRowClicks() {
     document.querySelectorAll(".row").forEach(function(row) {
+      var starBtn = row.querySelector(".star-btn");
+      if (starBtn) {
+        starBtn.addEventListener("click", function(e) {
+          e.stopPropagation();
+          var slug = row.dataset.slug;
+          var pid = parseInt(row.dataset.postId, 10);
+          toggleStar(slug, pid);
+          updateStarButtons(slug, pid);
+          updateAllUI();
+        });
+      }
       row.addEventListener("click", function() {
         var expanded = row.nextElementSibling;
         if (!expanded || !expanded.classList.contains("expanded-post")) return;
@@ -151,8 +210,8 @@
   // ── Search ──
   function applySearchFilter() {
     var query = (searchInput.value || "").toLowerCase().trim();
-    var view = activeView;
-    var list = document.querySelector('.feed-list[data-view="' + view + '"]');
+    var feedView = (activeView === "starred") ? "latest" : activeView;
+    var list = document.querySelector('.feed-list[data-view="' + feedView + '"]');
     if (!list) return;
 
     var rows = list.querySelectorAll(".row");
@@ -213,8 +272,8 @@
 
   function applyTagFilter() {
     var tag = tagSelect ? tagSelect.value : "";
-    var view = activeView;
-    var list = document.querySelector('.feed-list[data-view="' + view + '"]');
+    var feedView = (activeView === "starred") ? "latest" : activeView;
+    var list = document.querySelector('.feed-list[data-view="' + feedView + '"]');
     if (!list) return;
 
     list.querySelectorAll(".row").forEach(function(row) {
@@ -249,6 +308,38 @@
     tagSelect.addEventListener("change", applyTagFilter);
   }
 
+  // ── Star filtering ──
+  function applyStarFilter() {
+    var feedView = (activeView === "starred") ? "latest" : activeView;
+    var list = document.querySelector('.feed-list[data-view="' + feedView + '"]');
+    if (!list) return;
+
+    list.querySelectorAll(".row").forEach(function(row) {
+      var expanded = row.nextElementSibling;
+      if (!starFilterActive) {
+        row.classList.remove("hidden-by-star");
+        if (expanded) expanded.classList.remove("hidden-by-star");
+      } else {
+        var slug = row.dataset.slug;
+        var pid = parseInt(row.dataset.postId, 10);
+        var match = isStarred(slug, pid);
+        row.classList.toggle("hidden-by-star", !match);
+        if (expanded) expanded.classList.toggle("hidden-by-star", !match);
+      }
+    });
+
+    if (btnStarred) btnStarred.classList.toggle("active", starFilterActive);
+    updateAllUI();
+  }
+
+  function clearStarFilter() {
+    starFilterActive = false;
+    document.querySelectorAll(".hidden-by-star").forEach(function(el) {
+      el.classList.remove("hidden-by-star");
+    });
+    if (btnStarred) btnStarred.classList.remove("active");
+  }
+
   // Sidebar tag button clicks
   document.querySelectorAll(".tag-btn").forEach(function(btn) {
     btn.addEventListener("click", function() {
@@ -271,6 +362,14 @@
       applyTagFilter();
     });
   });
+
+  // ── Star toggle button ──
+  if (btnStarred) {
+    btnStarred.addEventListener("click", function() {
+      starFilterActive = !starFilterActive;
+      applyStarFilter();
+    });
+  }
 
   // ── Collapsible tags in sidebar ──
   (function() {
@@ -312,7 +411,8 @@
   if (btnMarkAll) {
     btnMarkAll.addEventListener("click", function() {
       var view = activeView;
-      var list = document.querySelector('.feed-list[data-view="' + view + '"]');
+      var feedView = (view === "starred") ? "latest" : view;
+      var list = document.querySelector('.feed-list[data-view="' + feedView + '"]');
       if (!list) return;
 
       list.querySelectorAll(".row").forEach(function(row) {
@@ -321,7 +421,7 @@
         markRead(slug, pid);
       });
 
-      if (view === "latest") {
+      if (view === "latest" || view === "starred") {
         channelSlugs.forEach(function(slug) {
           states[slug].lastSyncMaxId = CHANNELS[slug].maxId;
           saveState(slug);
@@ -343,6 +443,12 @@
       row.classList.toggle("read", isRead(slug, pid));
       var dot = row.querySelector(".new-dot");
       if (dot) dot.classList.toggle("visible", isNewPost(slug, pid));
+      var starBtn = row.querySelector(".star-btn");
+      if (starBtn) {
+        var starred = isStarred(slug, pid);
+        starBtn.classList.toggle("starred", starred);
+        starBtn.innerHTML = starred ? "&#9733;" : "&#9734;";
+      }
     });
 
     document.querySelectorAll(".channel-item").forEach(function(item) {
@@ -351,7 +457,11 @@
       if (!countEl) return;
       var unread = 0;
 
-      if (view === "latest") {
+      if (view === "starred") {
+        var starCount = Object.keys(starredSet).length;
+        countEl.textContent = starCount > 0 ? starCount : "";
+        return;
+      } else if (view === "latest") {
         channelSlugs.forEach(function(slug) {
           unread += countUnread(slug);
         });
@@ -362,13 +472,13 @@
     });
 
     if (counterEl) {
-      var view = activeView;
-      var list = document.querySelector('.feed-list[data-view="' + view + '"]');
+      var feedView = (activeView === "starred") ? "latest" : activeView;
+      var list = document.querySelector('.feed-list[data-view="' + feedView + '"]');
       if (list) {
         var rows = list.querySelectorAll(".row");
         var total = 0, readCount = 0;
         rows.forEach(function(r) {
-          if (!r.classList.contains("hidden-by-tag") && !r.classList.contains("hidden-by-search")) {
+          if (!r.classList.contains("hidden-by-tag") && !r.classList.contains("hidden-by-search") && !r.classList.contains("hidden-by-star")) {
             total++;
             if (r.classList.contains("read")) readCount++;
           }
@@ -420,7 +530,7 @@
 
   var savedView = "";
   try { savedView = localStorage.getItem("reader-active-view") || ""; } catch(e) {}
-  if (savedView !== "latest" && channelSlugs.indexOf(savedView) === -1) {
+  if (savedView !== "latest" && savedView !== "starred" && channelSlugs.indexOf(savedView) === -1) {
     savedView = "latest";
   }
   switchView(savedView);

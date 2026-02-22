@@ -92,6 +92,7 @@ a:hover { text-decoration: underline; }
   white-space: nowrap;
 }
 .toolbar-btn:hover { color: var(--text); border-color: var(--text-muted); }
+.toolbar-btn.active { color: var(--accent); border-color: var(--accent); }
 .toolbar-counter {
   font-size: 11px;
   color: var(--text-muted);
@@ -238,6 +239,24 @@ a:hover { text-decoration: underline; }
   visibility: hidden;
 }
 .row .new-dot.visible { visibility: visible; }
+.star-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  opacity: 0.4;
+  transition: opacity 0.15s;
+}
+.row:hover .star-btn { opacity: 0.7; }
+.star-btn.starred {
+  color: var(--accent);
+  opacity: 1;
+}
+.star-btn.starred:hover { opacity: 0.8; }
 .row-channel {
   display: flex; align-items: center; gap: 4px;
   flex: 0 0 140px;
@@ -357,6 +376,7 @@ a:hover { text-decoration: underline; }
 /* Hidden by filter */
 .hidden-by-tag { display: none !important; }
 .hidden-by-search { display: none !important; }
+.hidden-by-star { display: none !important; }
 
 /* ── Mobile ── */
 @media (max-width: 767px) {
