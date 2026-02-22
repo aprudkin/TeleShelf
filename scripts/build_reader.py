@@ -174,7 +174,7 @@ def load_channel(slug: str, base_dir: str) -> dict:
     with open(messages_path, "r", encoding="utf-8") as f:
         messages_data = json.load(f)
     messages = messages_data.get("messages", [])
-    messages.sort(key=lambda m: m["id"])
+    messages.sort(key=lambda m: m["id"], reverse=True)
 
     tags = {}
     tags_path = os.path.join(base_dir, "tags.json")
