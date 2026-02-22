@@ -67,7 +67,7 @@ No `done` label — closing the issue (or merging the PR) is sufficient.
 
 ## Context Injection
 
-Each `claude -p -w` invocation receives a structured prompt:
+Each `claude -p -w` invocation receives a structured prompt via a temp file (avoids `ARG_MAX` limits with long issue bodies):
 
 ```
 You are working on GitHub issue #N in this repository.
@@ -77,8 +77,11 @@ Title: <title>
 Body:
 <body>
 
+## Comments
+<issue comments, if any — may contain clarifications and additional context>
+
 ## Cross-session context
-<contents of PROGRESS.md, if exists>
+<contents of PROGRESS.md from main repo root, if exists>
 
 ## Instructions
 - You are in an isolated git worktree — commit freely
@@ -87,12 +90,18 @@ Body:
 - When done, output a one-paragraph summary of what you did
 ```
 
+Prompt is written to a temp file and piped via stdin: `claude -p -w ... < /tmp/claude-loop-prompt-XXXXXX.md`. Temp file is cleaned up after use.
+
 ### Allowed tools
 
 The `claude -p` invocation uses `--allowedTools` to grant:
 - Bash, Read, Write, Edit, Glob, Grep, Task (subagents for exploration)
 
 No interactive tools (AskUserQuestion) — the loop runs unattended.
+
+### Timeout
+
+Each `claude -p` invocation is wrapped in `timeout $TIMEOUT` (default: 1800s = 30 min). Exit code 124 = timed out. Configurable via `--timeout <seconds>`.
 
 ## PROGRESS.md — Cross-Session Memory
 
@@ -148,6 +157,15 @@ wait  # wait for all to finish
 
 Each worktree is fully isolated — no conflicts between parallel agents. The `--max-parallel N` flag limits concurrency (default: 3).
 
+### Per-job logging
+
+Each job writes to its own log file and result JSON to avoid interleaved output:
+- Log: `$LOG_DIR/issue-N.log` (full claude output)
+- Result: `$LOG_DIR/issue-N.json` (status, PR URL, duration, error)
+- Progress: `$LOG_DIR/issue-N.progress` (one-liner merged into PROGRESS.md after all jobs)
+
+`$LOG_DIR` defaults to `/tmp/claude-loop-results/` (recreated each run).
+
 ## Issue Validation
 
 Before processing, each issue is validated:
@@ -169,12 +187,35 @@ Worktrees accumulate in `.claude/worktrees/issue-*` after processing. The `--cle
 
 Checks each `issue-*` worktree: if the corresponding PR is merged/closed, removes with `git worktree remove`. Warns if > 5 worktrees exist without `--cleanup`.
 
+## Signal Handling
+
+Ctrl+C or unexpected exit triggers a `trap` handler that:
+1. Kills all child `claude -p` processes
+2. Removes `in-progress` labels from all issues being processed
+3. Exits with code 130
+
+This prevents orphaned background jobs and stale labels.
+
+## Stale Label Recovery
+
+If the script crashes mid-run, issues can be left with `in-progress` label and no PR. The `--recover` flag handles this:
+
+```bash
+~/.claude/scripts/claude-issue-loop.sh --recover
+```
+
+At startup, checks for `in-progress` labeled issues:
+- If worktree exists with commits: warn (manual intervention needed)
+- If no worktree: reset label `in-progress` → `todo` (crashed run, safe to retry)
+
+Without `--recover`: prints warnings but doesn't touch stale issues.
+
 ## Error Handling
 
 | Scenario | Behavior |
 |----------|----------|
-| `claude -p` exits non-zero | Post error comment to issue, remove `in-progress` label, continue to next |
-| `claude -p` times out | Same as non-zero exit |
+| `claude -p` exits non-zero | Post error comment (last 20 log lines) to issue, remove `in-progress` label, continue |
+| `claude -p` times out (exit 124) | Same as non-zero, comment notes "timed out after Ns" |
 | `gh` commands fail | Log warning, continue (best-effort) |
 | No `todo` issues | Print "No issues to process", exit 0 |
 | Not a git repo | Exit 1 with error message |
@@ -182,6 +223,9 @@ Checks each `issue-*` worktree: if the corresponding PR is merged/closed, remove
 | Worktree already exists | Skip issue with warning (likely already in progress) |
 | Issue body too short | Reject with comment, remove `todo` label |
 | Blocked by open issue | Skip, leave `todo` label |
+| Ctrl+C / SIGTERM | Kill children, remove `in-progress` labels, exit 130 |
+| Stale `in-progress` labels | Warn at startup; `--recover` resets to `todo` |
+| Agent made no commits | Post "no changes" comment, remove `in-progress`, skip PR creation |
 
 The loop is resilient — one failed issue does not stop processing of remaining issues.
 
@@ -208,6 +252,12 @@ The loop is resilient — one failed issue does not stop processing of remaining
 
 # Clean up worktrees for merged/closed PRs
 ~/.claude/scripts/claude-issue-loop.sh --cleanup
+
+# Custom timeout per issue (default: 30 min)
+~/.claude/scripts/claude-issue-loop.sh --timeout 3600
+
+# Fix stale in-progress labels from crashed runs
+~/.claude/scripts/claude-issue-loop.sh --recover
 ```
 
 ### Default model
@@ -216,6 +266,7 @@ The loop is resilient — one failed issue does not stop processing of remaining
 
 ## Prerequisites
 
+- **bash 4.3+** — required for `wait -n`. macOS ships bash 3.2; install via `brew install bash` (`/opt/homebrew/bin/bash`). Script checks version at startup and exits with error if too old.
 - `claude` CLI installed and authenticated
 - `gh` CLI installed and authenticated
 - Must be run from a git repo with a GitHub remote
