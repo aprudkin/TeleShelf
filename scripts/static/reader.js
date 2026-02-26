@@ -158,6 +158,81 @@
     URL.revokeObjectURL(url);
   }
 
+  function importState() {
+    var input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json,application/json";
+    input.addEventListener("change", function() {
+      var file = input.files[0];
+      if (!file) return;
+      var reader = new FileReader();
+      reader.onload = function() {
+        try {
+          var data = JSON.parse(reader.result);
+          if (data.version !== 1) {
+            alert("Unsupported state file version");
+            return;
+          }
+
+          // Merge starred
+          var importedStarred = data.starred || {};
+          for (var key in importedStarred) {
+            if (importedStarred[key]) starredSet[key] = true;
+          }
+          try {
+            localStorage.setItem("reader-starred", JSON.stringify(starredSet));
+          } catch(e) {}
+
+          // Merge per-channel
+          var importedChannels = data.channels || {};
+          for (var slug in importedChannels) {
+            if (!CHANNELS[slug]) continue;
+            var imported = importedChannels[slug];
+            var local = loadState(slug) || { readPosts: [], lastSyncMaxId: 0 };
+
+            var readSet = {};
+            var i;
+            for (i = 0; i < local.readPosts.length; i++) {
+              readSet[local.readPosts[i]] = true;
+            }
+            var importedPosts = imported.readPosts || [];
+            for (i = 0; i < importedPosts.length; i++) {
+              readSet[importedPosts[i]] = true;
+            }
+            local.readPosts = Object.keys(readSet).map(Number);
+            if (imported.lastSyncMaxId > local.lastSyncMaxId) {
+              local.lastSyncMaxId = imported.lastSyncMaxId;
+            }
+
+            states[slug] = local;
+            // Rebuild readSets
+            var rs = {};
+            for (i = 0; i < local.readPosts.length; i++) {
+              rs[local.readPosts[i]] = true;
+            }
+            readSets[slug] = rs;
+
+            saveState(slug);
+          }
+
+          // Preferences: imported values only if localStorage empty
+          var prefs = data.preferences || {};
+          try {
+            if (!localStorage.getItem("reader-theme") && prefs.theme) {
+              localStorage.setItem("reader-theme", prefs.theme);
+            }
+          } catch(e) {}
+
+          updateAllUI();
+        } catch(e) {
+          alert("Invalid state file: " + e.message);
+        }
+      };
+      reader.readAsText(file);
+    });
+    input.click();
+  }
+
   function storageKey(slug) {
     return "reader-" + CHANNELS[slug].channelId;
   }
