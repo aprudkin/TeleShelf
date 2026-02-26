@@ -15,6 +15,12 @@
 {{ channels_json }}
 </script>
 
+{% if saved_state_json %}
+<script id="saved-state" type="application/json">
+{{ saved_state_json }}
+</script>
+{% endif %}
+
 {# ── Sidebar ── #}
 <nav id="sidebar" class="sidebar">
   <div class="sidebar-header">TeleShelf</div>
