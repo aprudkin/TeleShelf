@@ -404,4 +404,9 @@ a:hover { text-decoration: underline; }
   .main { left: 0; }
   .row-channel { flex: 0 0 80px; }
   .toolbar-search { flex: 0 0 120px; }
+  .toolbar-tag-select { display: none; }
+  #btn-starred { display: none; }
+  #counter { display: none; }
+  #btn-export { display: none; }
+  #btn-import { display: none; }
 }
