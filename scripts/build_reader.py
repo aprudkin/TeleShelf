@@ -240,9 +240,16 @@ def render_thread_message(msg: dict) -> str:
     return "\n".join(parts)
 
 
-def extract_title_preview(text: str, title_len: int = 60, preview_len: int = 120) -> tuple:
+def extract_title_preview(text: str, file_field: str = "", title_len: int = 60, preview_len: int = 120) -> tuple:
     if not text:
-        return "", ""
+        if file_field:
+            ext = file_ext(file_field)
+            if ext in IMAGE_EXTS:
+                return "[Фото]", ""
+            if ext in VIDEO_EXTS:
+                return "[Видео]", ""
+            return f"[Файл: {file_field}]", ""
+        return "[Пустой пост]", ""
     clean = text.replace("\n", " ").strip()
     clean = re.sub(r'\s+', ' ', clean)
     if len(clean) <= title_len:
@@ -311,7 +318,8 @@ def prepare_post(msg: dict, channel: dict, media_base: str, channel_color: str) 
     text = msg.get("text", "")
     file_field = msg.get("file", "")
 
-    title, preview = extract_title_preview(text)
+    title, preview = extract_title_preview(text, file_field)
+    is_fallback_title = not text
     post_tags = tags.get(str(pid), [])
 
     thread_html = ""
@@ -332,6 +340,7 @@ def prepare_post(msg: dict, channel: dict, media_base: str, channel_color: str) 
         "channel_name": config.get("name", slug),
         "channel_color": channel_color,
         "title": escape(title),
+        "is_fallback_title": is_fallback_title,
         "preview": escape(preview),
         "date_compact": compact_date(date_ts),
         "date_full": format_date(date_ts),

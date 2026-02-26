@@ -289,6 +289,7 @@ a:hover { text-decoration: underline; }
   max-width: 45%;
 }
 .row.read .row-title { font-weight: 400; color: var(--text-muted); }
+.row-title-fallback { font-weight: 400; font-style: italic; color: var(--text-muted); }
 .row-preview {
   color: var(--text-muted);
   white-space: nowrap;

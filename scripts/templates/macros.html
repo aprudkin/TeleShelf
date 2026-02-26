@@ -11,7 +11,7 @@
     <span class="row-channel-dot" style="background:{{ post.channel_color }}"></span>
     <span class="row-channel-name">{{ post.channel_name }}</span>
   </div>
-  <span class="row-title">{{ post.title }}</span>
+  <span class="row-title{% if post.is_fallback_title %} row-title-fallback{% endif %}">{{ post.title }}</span>
   {% if post.preview %}<span class="row-preview"> — {{ post.preview }}</span>{% endif %}
   <span class="row-icons">
     {% if post.media_icon_class %}<span class="icon {{ post.media_icon_class }}"></span>{% endif %}
