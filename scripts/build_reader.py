@@ -420,6 +420,20 @@ def build_combined_reader() -> None:
             "name": ch["name"],
         }
 
+    # Load saved state if present
+    saved_state_json = ""
+    state_path = os.path.join("reader", "state.json")
+    if os.path.isfile(state_path):
+        with open(state_path, "r", encoding="utf-8") as f:
+            saved_state_raw = f.read()
+        # Validate it's valid JSON
+        try:
+            json.loads(saved_state_raw)
+            saved_state_json = saved_state_raw
+            print(f"  Embedded saved state from {state_path}")
+        except json.JSONDecodeError:
+            print(f"  Warning: {state_path} is not valid JSON, skipping", file=sys.stderr)
+
     # Load CSS and JS from static files
     css_path = os.path.join(SCRIPT_DIR, "static", "reader.css")
     js_path = os.path.join(SCRIPT_DIR, "static", "reader.js")
@@ -443,6 +457,7 @@ def build_combined_reader() -> None:
         all_posts=all_posts,
         all_tags=all_tags,
         channels_json=json.dumps(channels_js_data, ensure_ascii=False),
+        saved_state_json=saved_state_json,
     )
 
     # Write output
