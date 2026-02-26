@@ -124,6 +124,40 @@
     } catch(e) {}
   }
 
+  // ── Export / Import ──
+  function exportState() {
+    var data = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      channels: {},
+      starred: JSON.parse(JSON.stringify(starredSet)),
+      preferences: {}
+    };
+
+    channelSlugs.forEach(function(slug) {
+      var st = loadState(slug);
+      if (st) {
+        data.channels[slug] = {
+          readPosts: st.readPosts || [],
+          lastSyncMaxId: st.lastSyncMaxId || 0
+        };
+      }
+    });
+
+    try { data.preferences.theme = localStorage.getItem("reader-theme") || "dark"; } catch(e) {}
+    try { data.preferences.activeView = localStorage.getItem("reader-active-view") || "latest"; } catch(e) {}
+
+    var blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "state.json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
   function storageKey(slug) {
     return "reader-" + CHANNELS[slug].channelId;
   }
