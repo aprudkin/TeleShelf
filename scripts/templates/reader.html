@@ -83,6 +83,7 @@
     {% for post in all_posts %}
     {{ post_row(post) }}
     {% endfor %}
+    <div class="empty-state" style="display:none">Ничего не найдено</div>
   </div>
 
   {# Per-channel lists #}
@@ -91,6 +92,7 @@
     {% for post in ch.posts %}
     {{ post_row(post) }}
     {% endfor %}
+    <div class="empty-state" style="display:none">Ничего не найдено</div>
   </div>
   {% endfor %}
 </main>

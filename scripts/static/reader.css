@@ -390,6 +390,13 @@ a:hover { text-decoration: underline; }
 .hidden-by-search { display: none !important; }
 .hidden-by-star { display: none !important; }
 
+.empty-state {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
 /* ── Mobile ── */
 @media (max-width: 767px) {
   .hamburger { display: block; }

@@ -359,6 +359,7 @@
     try { localStorage.setItem("reader-active-view", view); } catch(e) {}
 
     updateAllUI();
+    updateEmptyState();
   }
 
   // ── Row click → accordion ──
@@ -417,12 +418,14 @@
         if (expanded) expanded.classList.toggle("hidden-by-search", !match);
       }
     });
+    updateEmptyState();
   }
 
   function clearSearchFilter() {
     document.querySelectorAll(".hidden-by-search").forEach(function(el) {
       el.classList.remove("hidden-by-search");
     });
+    updateEmptyState();
   }
 
   if (searchInput) {
@@ -482,6 +485,7 @@
     document.querySelectorAll(".tag-btn").forEach(function(btn) {
       btn.classList.toggle("active", btn.dataset.tag === tag);
     });
+    updateEmptyState();
   }
 
   function clearTagFilter() {
@@ -492,6 +496,7 @@
     document.querySelectorAll(".tag-btn.active").forEach(function(btn) {
       btn.classList.remove("active");
     });
+    updateEmptyState();
   }
 
   if (tagSelect) {
@@ -519,6 +524,7 @@
     });
 
     if (btnStarred) btnStarred.classList.toggle("active", starFilterActive);
+    updateEmptyState();
     updateAllUI();
   }
 
@@ -528,6 +534,46 @@
       el.classList.remove("hidden-by-star");
     });
     if (btnStarred) btnStarred.classList.remove("active");
+    updateEmptyState();
+  }
+
+  // ── Empty state ──
+  function updateEmptyState() {
+    var feedView = (activeView === "starred") ? "latest" : activeView;
+    var list = document.querySelector('.feed-list[data-view="' + feedView + '"]');
+    if (!list) return;
+
+    var emptyEl = list.querySelector(".empty-state");
+    if (!emptyEl) return;
+
+    var hasVisible = false;
+    var rows = list.querySelectorAll(".row");
+    for (var i = 0; i < rows.length; i++) {
+      if (!rows[i].classList.contains("hidden-by-tag") &&
+          !rows[i].classList.contains("hidden-by-search") &&
+          !rows[i].classList.contains("hidden-by-star")) {
+        hasVisible = true;
+        break;
+      }
+    }
+
+    if (hasVisible) {
+      emptyEl.style.display = "none";
+    } else {
+      // Determine message based on active filters
+      var msg = "Ничего не найдено";
+      var searchQuery = searchInput ? searchInput.value.trim() : "";
+      var tagValue = tagSelect ? tagSelect.value : "";
+
+      if (starFilterActive && !searchQuery && !tagValue) {
+        msg = "Нет избранных постов";
+      } else if (tagValue && !searchQuery && !starFilterActive) {
+        msg = "Нет постов с тегом \u00ab" + tagValue + "\u00bb";
+      }
+
+      emptyEl.textContent = msg;
+      emptyEl.style.display = "";
+    }
   }
 
   // Sidebar tag button clicks
