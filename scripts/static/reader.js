@@ -48,6 +48,82 @@
     });
   }
 
+  // ── Saved state (embedded at build time) ──
+  var savedState = null;
+  (function() {
+    try {
+      var el = document.getElementById("saved-state");
+      if (el) savedState = JSON.parse(el.textContent);
+    } catch(e) {}
+  })();
+
+  function mergeSavedState() {
+    if (!savedState || savedState.version !== 1) return;
+
+    // Merge starred: union of both
+    var savedStarred = savedState.starred || {};
+    for (var key in savedStarred) {
+      if (savedStarred[key] && !starredSet[key]) {
+        starredSet[key] = true;
+      }
+    }
+    try {
+      localStorage.setItem("reader-starred", JSON.stringify(starredSet));
+    } catch(e) {}
+
+    // Merge per-channel state
+    var savedChannels = savedState.channels || {};
+    for (var slug in savedChannels) {
+      if (!CHANNELS[slug]) continue;
+      var saved = savedChannels[slug];
+      var local = loadState(slug);
+
+      if (!local) {
+        // No local state — use saved state directly
+        var st = {
+          readPosts: saved.readPosts || [],
+          lastSyncMaxId: saved.lastSyncMaxId || 0
+        };
+        try {
+          localStorage.setItem(storageKey(slug), JSON.stringify(st));
+        } catch(e) {}
+        continue;
+      }
+
+      // Merge readPosts: set union
+      var readSet = {};
+      var i;
+      for (i = 0; i < local.readPosts.length; i++) {
+        readSet[local.readPosts[i]] = true;
+      }
+      var savedPosts = saved.readPosts || [];
+      for (i = 0; i < savedPosts.length; i++) {
+        readSet[savedPosts[i]] = true;
+      }
+      local.readPosts = Object.keys(readSet).map(Number);
+
+      // lastSyncMaxId: take max
+      if (saved.lastSyncMaxId > local.lastSyncMaxId) {
+        local.lastSyncMaxId = saved.lastSyncMaxId;
+      }
+
+      try {
+        localStorage.setItem(storageKey(slug), JSON.stringify(local));
+      } catch(e) {}
+    }
+
+    // Preferences: localStorage wins (don't overwrite)
+    var prefs = savedState.preferences || {};
+    try {
+      if (!localStorage.getItem("reader-theme") && prefs.theme) {
+        localStorage.setItem("reader-theme", prefs.theme);
+      }
+      if (!localStorage.getItem("reader-active-view") && prefs.activeView) {
+        localStorage.setItem("reader-active-view", prefs.activeView);
+      }
+    } catch(e) {}
+  }
+
   function storageKey(slug) {
     return "reader-" + CHANNELS[slug].channelId;
   }
@@ -65,6 +141,8 @@
       localStorage.setItem(storageKey(slug), JSON.stringify(states[slug]));
     } catch(e) {}
   }
+
+  mergeSavedState();
 
   // Init states
   channelSlugs.forEach(function(slug) {
