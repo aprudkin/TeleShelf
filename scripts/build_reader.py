@@ -341,7 +341,7 @@ def prepare_post(msg: dict, channel: dict, media_base: str, channel_color: str) 
         "media_icon_class": media_icon_class(file_field),
         "tags": post_tags,
         "tags_str": ",".join(post_tags),
-        "search_text": escape(text.replace("\n", " ")[:300]),
+        "search_text": escape(text.replace("\n", " ")),
         "thread_html": thread_html,
     }
 
