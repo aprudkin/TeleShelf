@@ -221,6 +221,9 @@
             if (!localStorage.getItem("reader-theme") && prefs.theme) {
               localStorage.setItem("reader-theme", prefs.theme);
             }
+            if (!localStorage.getItem("reader-active-view") && prefs.activeView) {
+              localStorage.setItem("reader-active-view", prefs.activeView);
+            }
           } catch(e) {}
 
           updateAllUI();
