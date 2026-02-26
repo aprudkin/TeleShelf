@@ -236,6 +236,7 @@ a:hover { text-decoration: underline; }
 .row.read { opacity: 0.55; }
 .row.read:hover { opacity: 0.75; }
 .row.expanded { background: var(--bg-row-hover); }
+.row.focused { border-left: 3px solid var(--accent); padding-left: 9px; }
 .row .new-dot {
   width: 6px; height: 6px;
   border-radius: 50%;

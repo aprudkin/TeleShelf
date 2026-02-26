@@ -356,6 +356,11 @@
     // Scroll to top
     mainEl.scrollTop = 0;
 
+    // Reset keyboard focus
+    focusedIndex = -1;
+    var prev = document.querySelector(".row.focused");
+    if (prev) prev.classList.remove("focused");
+
     try { localStorage.setItem("reader-active-view", view); } catch(e) {}
 
     updateAllUI();
@@ -768,6 +773,126 @@
   var btnImport = document.getElementById("btn-import");
   if (btnExport) btnExport.addEventListener("click", exportState);
   if (btnImport) btnImport.addEventListener("click", importState);
+
+  // ── Keyboard navigation ──
+  var focusedIndex = -1;
+
+  function getVisibleRows() {
+    var feedView = (activeView === "starred") ? "latest" : activeView;
+    var list = document.querySelector('.feed-list[data-view="' + feedView + '"]');
+    if (!list) return [];
+    var rows = list.querySelectorAll(".row");
+    var visible = [];
+    for (var i = 0; i < rows.length; i++) {
+      if (!rows[i].classList.contains("hidden-by-tag") &&
+          !rows[i].classList.contains("hidden-by-search") &&
+          !rows[i].classList.contains("hidden-by-star")) {
+        visible.push(rows[i]);
+      }
+    }
+    return visible;
+  }
+
+  function setFocus(idx) {
+    var rows = getVisibleRows();
+    // Remove previous focus
+    var prev = document.querySelector(".row.focused");
+    if (prev) prev.classList.remove("focused");
+
+    if (idx < 0 || idx >= rows.length) {
+      focusedIndex = -1;
+      return;
+    }
+    focusedIndex = idx;
+    rows[idx].classList.add("focused");
+    rows[idx].scrollIntoView({ block: "nearest" });
+  }
+
+  function toggleFocusedRow() {
+    var rows = getVisibleRows();
+    if (focusedIndex < 0 || focusedIndex >= rows.length) return;
+    var row = rows[focusedIndex];
+    row.click();
+  }
+
+  function collapseCurrent() {
+    var open = document.querySelector(".expanded-post.open");
+    if (open) {
+      open.classList.remove("open");
+      var row = open.previousElementSibling;
+      if (row && row.classList.contains("row")) {
+        row.classList.remove("expanded");
+      }
+    }
+  }
+
+  function starFocused() {
+    var rows = getVisibleRows();
+    if (focusedIndex < 0 || focusedIndex >= rows.length) return;
+    var row = rows[focusedIndex];
+    var slug = row.dataset.slug;
+    var pid = parseInt(row.dataset.postId, 10);
+    toggleStar(slug, pid);
+    updateStarButtons(slug, pid);
+    updateAllUI();
+  }
+
+  function findNextUnread(direction) {
+    var rows = getVisibleRows();
+    if (rows.length === 0) return;
+    var start = focusedIndex < 0 ? 0 : focusedIndex + direction;
+    var i = start;
+    while (i >= 0 && i < rows.length) {
+      if (!rows[i].classList.contains("read")) {
+        setFocus(i);
+        return;
+      }
+      i += direction;
+    }
+  }
+
+  document.addEventListener("keydown", function(e) {
+    var tag = (e.target.tagName || "").toLowerCase();
+    if (tag === "input" || tag === "select" || tag === "textarea") return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+    var rows = getVisibleRows();
+    switch (e.key) {
+      case "j":
+        e.preventDefault();
+        setFocus(Math.min(focusedIndex + 1, rows.length - 1));
+        break;
+      case "k":
+        e.preventDefault();
+        setFocus(Math.max(focusedIndex - 1, 0));
+        break;
+      case "n":
+        e.preventDefault();
+        findNextUnread(1);
+        break;
+      case "p":
+        e.preventDefault();
+        findNextUnread(-1);
+        break;
+      case "Enter":
+      case "o":
+        e.preventDefault();
+        toggleFocusedRow();
+        break;
+      case "Escape":
+        e.preventDefault();
+        collapseCurrent();
+        break;
+      case "s":
+        e.preventDefault();
+        starFocused();
+        break;
+      case "/":
+        e.preventDefault();
+        if (searchInput) searchInput.focus();
+        break;
+    }
+  });
 
   var savedView = "";
   try { savedView = localStorage.getItem("reader-active-view") || ""; } catch(e) {}
