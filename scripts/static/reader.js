@@ -718,6 +718,11 @@
   // ── Init ──
   setupRowClicks();
 
+  var btnExport = document.getElementById("btn-export");
+  var btnImport = document.getElementById("btn-import");
+  if (btnExport) btnExport.addEventListener("click", exportState);
+  if (btnImport) btnImport.addEventListener("click", importState);
+
   var savedView = "";
   try { savedView = localStorage.getItem("reader-active-view") || ""; } catch(e) {}
   if (savedView !== "latest" && savedView !== "starred" && channelSlugs.indexOf(savedView) === -1) {

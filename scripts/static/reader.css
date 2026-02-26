@@ -93,6 +93,11 @@ a:hover { text-decoration: underline; }
 }
 .toolbar-btn:hover { color: var(--text); border-color: var(--text-muted); }
 .toolbar-btn.active { color: var(--accent); border-color: var(--accent); }
+.toolbar-btn-icon {
+  font-size: 16px;
+  padding: 2px 6px;
+  line-height: 1;
+}
 .toolbar-counter {
   font-size: 11px;
   color: var(--text-muted);
