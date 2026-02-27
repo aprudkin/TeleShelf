@@ -517,6 +517,166 @@ tasks:
       echo "  open {{.ROOT_DIR}}/reader/index.html"
       echo "========================================="
 
+  sync-thread-media:
+    desc: Download missing thread media for a channel
+    summary: |
+      Usage: task sync-thread-media -- <slug>
+
+      For each post in a channel, exports threads (if missing) and downloads
+      media files matching sync_thread_media extensions. Skips already-downloaded files.
+
+      Requires sync_thread_media in channel.json.
+
+      Example:
+        task sync-thread-media -- iishenka-pro
+    preconditions:
+      - sh: '[ -n "{{.CLI_ARGS}}" ]'
+        msg: "Error: slug is required. Usage: task sync-thread-media -- <slug>"
+      - sh: '[ -f "{{.DOWNLOADS_DIR}}/{{.CLI_ARGS}}/channel.json" ]'
+        msg: "Error: channel.json not found at {{.DOWNLOADS_DIR}}/{{.CLI_ARGS}}/channel.json"
+      - sh: '[ -f "{{.DOWNLOADS_DIR}}/{{.CLI_ARGS}}/channel-full/all-messages.json" ]'
+        msg: "Error: all-messages.json not found"
+    silent: true
+    cmd: |
+      set -eo pipefail
+
+      SLUG="{{.CLI_ARGS}}"
+      CHANNEL_DIR="{{.DOWNLOADS_DIR}}/$SLUG"
+      CONFIG_FILE="$CHANNEL_DIR/channel.json"
+      MESSAGES_FILE="$CHANNEL_DIR/channel-full/all-messages.json"
+
+      # Read config
+      CHANNEL_ID=$(python3 -c "import json, sys; print(json.load(open(sys.argv[1]))['channel_id'])" "$CONFIG_FILE")
+      DISCUSSION_GROUP_ID=$(python3 -c "import json, sys; print(json.load(open(sys.argv[1])).get('discussion_group_id', ''))" "$CONFIG_FILE")
+      SYNC_THREAD_EXTS=$(python3 -c "
+      import json, sys
+      config = json.load(open(sys.argv[1]))
+      exts = config.get('sync_thread_media', [])
+      print(' '.join(exts))
+      " "$CONFIG_FILE")
+
+      if [[ -z "$SYNC_THREAD_EXTS" ]]; then
+        echo "Error: sync_thread_media not configured in channel.json for '$SLUG'."
+        exit 1
+      fi
+
+      if [[ -z "$DISCUSSION_GROUP_ID" ]]; then
+        echo "Error: discussion_group_id required for thread sync."
+        exit 1
+      fi
+
+      echo "Channel: $SLUG (ID: $CHANNEL_ID, Discussion: $DISCUSSION_GROUP_ID)"
+      echo "Media extensions: $SYNC_THREAD_EXTS"
+      echo ""
+
+      mkdir -p "$CHANNEL_DIR/threads" "$CHANNEL_DIR/threads-media"
+
+      # Get all post IDs
+      POST_IDS=$(python3 -c "
+      import json, sys
+      with open(sys.argv[1]) as f:
+          d = json.load(f)
+      for msg in d.get('messages', []):
+          print(msg['id'])
+      " "$MESSAGES_FILE")
+
+      TOTAL=0
+      EXPORTED=0
+      DOWNLOADED=0
+      SKIPPED=0
+
+      for POST_ID in $POST_IDS; do
+        TOTAL=$((TOTAL + 1))
+        THREAD_FILE="$CHANNEL_DIR/threads/thread-${POST_ID}.json"
+
+        # Export thread if missing
+        if [[ ! -f "$THREAD_FILE" ]]; then
+          # Try to find thread ID from post entities
+          THREAD_ID=$(python3 -c "
+          import json, re, sys
+          post_id = int(sys.argv[1])
+          discussion_id = sys.argv[2]
+          with open(sys.argv[3]) as f:
+              d = json.load(f)
+          for msg in d.get('messages', []):
+              if msg['id'] == post_id:
+                  for e in msg.get('entities', []):
+                      url = e.get('url', '')
+                      m = re.search(r't\.me/c/' + discussion_id + r'/(\d+)', url)
+                      if m:
+                          print(m.group(1))
+                          sys.exit(0)
+          print('')
+          " "$POST_ID" "$DISCUSSION_GROUP_ID" "$MESSAGES_FILE")
+
+          if [[ -n "$THREAD_ID" ]]; then
+            echo "Post $POST_ID: exporting thread (thread ID: $THREAD_ID)..."
+            if tdl chat export -c "$DISCUSSION_GROUP_ID" --all --with-content --reply "$THREAD_ID" -T id -i 1 -i 999999 -o "$THREAD_FILE" 2>&1; then
+              EXPORTED=$((EXPORTED + 1))
+            else
+              echo "  Warning: Failed to export thread for post $POST_ID"
+              continue
+            fi
+          else
+            echo "Post $POST_ID: no thread link, trying channel fallback..."
+            if tdl chat export -c "$CHANNEL_ID" --all --with-content --reply "$POST_ID" -T id -i 1 -i 999999 -o "$THREAD_FILE" 2>&1; then
+              EXPORTED=$((EXPORTED + 1))
+            else
+              echo "  Warning: Failed to export thread for post $POST_ID"
+              continue
+            fi
+          fi
+        fi
+
+        # Check thread file exists and find missing media
+        if [[ ! -f "$THREAD_FILE" ]]; then
+          continue
+        fi
+
+        MISSING_IDS=$(python3 -c "
+        import json, os, sys
+        thread_file = sys.argv[1]
+        exts = sys.argv[2].split()
+        discussion_id = sys.argv[3]
+        media_dir = sys.argv[4]
+        with open(thread_file) as f:
+            d = json.load(f)
+        for msg in d.get('messages', []):
+            f_name = msg.get('file', '')
+            if not f_name:
+                continue
+            if not any(f_name.lower().endswith(ext) for ext in exts):
+                continue
+            expected = f'{discussion_id}_{msg[\"id\"]}_{f_name}'
+            if os.path.exists(os.path.join(media_dir, expected)):
+                continue
+            print(f'{msg[\"id\"]}')
+        " "$THREAD_FILE" "$SYNC_THREAD_EXTS" "$DISCUSSION_GROUP_ID" "$CHANNEL_DIR/threads-media/")
+
+        if [[ -z "$MISSING_IDS" ]]; then
+          continue
+        fi
+
+        while IFS= read -r MSG_ID; do
+          echo "  Post $POST_ID: downloading thread media msg $MSG_ID..."
+          if tdl dl -u "https://t.me/c/$DISCUSSION_GROUP_ID/$MSG_ID" -d "$CHANNEL_DIR/threads-media/" 2>&1; then
+            DOWNLOADED=$((DOWNLOADED + 1))
+          else
+            echo "  Warning: Failed to download thread media msg $MSG_ID"
+            SKIPPED=$((SKIPPED + 1))
+          fi
+        done <<< "$MISSING_IDS"
+      done
+
+      echo ""
+      echo "Thread media sync complete for '$SLUG'."
+      echo "  Posts processed: $TOTAL"
+      echo "  Threads exported: $EXPORTED"
+      echo "  Media downloaded: $DOWNLOADED"
+      if [[ "$SKIPPED" -gt 0 ]]; then
+        echo "  Failed downloads: $SKIPPED"
+      fi
+
   re-export:
     desc: Re-export all messages with entities for a channel
     summary: |
