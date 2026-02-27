@@ -55,13 +55,15 @@ Each channel directory contains a `channel.json`:
 {
   "channel_id": "1234567890",
   "discussion_group_id": "9876543210",
-  "name": "My Channel"
+  "name": "My Channel",
+  "sync_thread_media": [".mp4"]
 }
 ```
 
 - `channel_id` (required): Telegram channel numeric ID
 - `discussion_group_id` (optional): linked discussion group for comment threads
 - `name`: human-readable channel name
+- `sync_thread_media` (optional): array of file extensions to auto-download from threads during sync (e.g., `[".mp4"]`). Requires `discussion_group_id`.
 
 ---
 
@@ -81,8 +83,9 @@ What it does:
 3. Runs `tdl chat export` for messages after that ID
 4. Merges new messages into `all-messages.json` (prepended, deduped, sorted desc)
 5. Downloads media via `tdl dl` for messages with a `file` field
-6. Tags new posts via `claude -p` (haiku model) — auto-assigns 1-4 Russian tags per post into `tags.json`
-7. Rebuilds combined HTML reader via `build_reader.py`
+6. If `sync_thread_media` is configured: exports threads for new posts and downloads matching media files into `threads-media/`
+7. Tags new posts via `claude -p` (haiku model) — auto-assigns 1-4 Russian tags per post into `tags.json`
+8. Rebuilds combined HTML reader via `build_reader.py`
 
 **Note:** Does NOT update `texts.md` — that is done manually.
 **Note:** Tagging requires Claude Code CLI (`claude`). If unavailable, sync continues without tagging.
@@ -101,6 +104,21 @@ What it does:
 3. On error: logs warning, continues to next channel
 4. Builds reader once at the end
 5. Prints summary: N succeeded, M failed (with names)
+
+### task sync-thread-media -- \<slug\>
+
+Downloads missing thread media for all posts in a channel. Exports thread JSON if not already present, then downloads media files matching `sync_thread_media` extensions.
+
+```bash
+task sync-thread-media -- iishenka-pro
+```
+
+What it does:
+1. Reads `sync_thread_media` extensions from `channel.json`
+2. For each post: checks if `threads/thread-{post_id}.json` exists, exports if missing
+3. Finds thread messages with files matching configured extensions
+4. Downloads missing files to `threads-media/`
+5. Prints summary: posts processed, threads exported, media downloaded
 
 ### task add-channel -- \<url\>
 
