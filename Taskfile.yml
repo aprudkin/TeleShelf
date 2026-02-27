@@ -366,6 +366,7 @@ tasks:
         else
           echo ""
           echo "Syncing thread media..."
+          mkdir -p "$CHANNEL_DIR/threads" "$CHANNEL_DIR/threads-media"
 
           # Get new post IDs from temp file
           NEW_POST_IDS=$(python3 -c "
@@ -406,7 +407,7 @@ tasks:
             fi
 
             # Download matching media from thread
-            python3 -c "
+            THREAD_MEDIA_IDS=$(python3 -c "
             import json, os, sys
             thread_file = sys.argv[1]
             exts = sys.argv[2].split()
@@ -426,10 +427,14 @@ tasks:
                 if os.path.exists(os.path.join(media_dir, expected)):
                     continue
                 print(f'{msg[\"id\"]}')
-            " "$THREAD_FILE" "$SYNC_THREAD_EXTS" "$DISCUSSION_GROUP_ID" "$CHANNEL_DIR/threads-media/" | while IFS= read -r MSG_ID; do
-              echo "    Downloading thread media msg $MSG_ID..."
-              tdl dl -u "https://t.me/c/$DISCUSSION_GROUP_ID/$MSG_ID" -d "$CHANNEL_DIR/threads-media/" || echo "    Warning: Failed to download thread media msg $MSG_ID"
-            done
+            " "$THREAD_FILE" "$SYNC_THREAD_EXTS" "$DISCUSSION_GROUP_ID" "$CHANNEL_DIR/threads-media/")
+
+            if [[ -n "$THREAD_MEDIA_IDS" ]]; then
+              while IFS= read -r MSG_ID; do
+                echo "    Downloading thread media msg $MSG_ID..."
+                tdl dl -u "https://t.me/c/$DISCUSSION_GROUP_ID/$MSG_ID" -d "$CHANNEL_DIR/threads-media/" || echo "    Warning: Failed to download thread media msg $MSG_ID"
+              done <<< "$THREAD_MEDIA_IDS"
+            fi
           done
         fi
       fi
